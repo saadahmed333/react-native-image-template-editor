@@ -1,6 +1,6 @@
 {
   "name": "react-native-image-template-editor",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A React Native component for creating and editing image templates.",
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",
