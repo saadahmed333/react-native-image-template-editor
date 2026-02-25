@@ -1,7 +1,7 @@
 {
   "name": "react-native-image-template-editor",
-  "version": "0.1.1",
-  "description": "A React Native component for creating and editing image templates.",
+  "version": "0.1.3",
+  "description": "A powerful React Native component for creating and editing image templates with drawing, text, shapes, and image overlays. Features comprehensive error handling, professional vector icons, and extensive customization options. Gallery icon functionality allows users to select images from device gallery with comprehensive error handling and user-friendly error messages.",
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",
   "exports": {
@@ -22,7 +22,6 @@
     "react-native.config.js",
     "!ios/build",
     "!android/build",
-    "!android/gradle",
     "!android/gradlew",
     "!android/gradlew.bat",
     "!android/local.properties",
@@ -35,12 +34,28 @@
     "example": "yarn workspace react-native-image-template-editor-example",
     "clean": "del-cli lib",
     "prepare": "bob build",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "test": "echo \"Error: No tests specified\" && exit 1",
+    "prepublishOnly": "npm run prepare && npm pack",
+    "prepublish": "npm run prepare && npm pack",
+    "publish": "npm run prepare && npm publish"
   },
   "keywords": [
     "react-native",
+    "image-editor",
+    "drawing",
+    "canvas",
+    "template",
+    "photo-editing",
+    "svg",
+    "shapes",
+    "text-overlay",
+    "image-overlay",
+    "vector-icons",
+    "react-navigation",
     "ios",
-    "android"
+    "android",
+    "typescript"
   ],
   "repository": {
     "type": "git",
@@ -53,27 +68,31 @@
   },
   "homepage": "https://github.com/saadahmed333/react-native-image-template-editor#readme",
   "publishConfig": {
-    "registry": "https://registry.npmjs.org/"
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
   },
-  "dependencies": {
-    "@react-navigation/native": "^6.1.18",
-    "react-native-image-picker": "^7.1.2",
+  "engines": {
+    "node": ">= 16.0.0",
+    "npm": ">= 8.0.0"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*",
     "react-native-svg": "^15.8.0",
-    "react-native-view-shot": "^3.8.0"
+    "react-native-view-shot": "^3.8.0",
+    "react-native-image-picker": "^7.1.2",
+    "@react-navigation/native": "^6.1.18"
   },
   "devDependencies": {
     "@react-native/babel-preset": "0.83.0",
     "@types/react": "^19.1.12",
+    "@types/react-native-vector-icons": "^6.4.18",
     "del-cli": "^6.0.0",
     "react": "19.1.0",
     "react-native": "0.81.5",
     "react-native-builder-bob": "^0.40.13",
     "turbo": "^2.5.6",
     "typescript": "^5.9.2"
-  },
-  "peerDependencies": {
-    "react": "*",
-    "react-native": "*"
   },
   "workspaces": [
     "example"

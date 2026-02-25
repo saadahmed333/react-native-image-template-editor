@@ -16,7 +16,8 @@ import {
 import Svg, {Rect, Ellipse, Line, Path} from 'react-native-svg';
 import {captureRef} from 'react-native-view-shot';
 import {launchImageLibrary} from 'react-native-image-picker';
-import {useNavigation, useRoute} from '@react-navigation/native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 // import AppStyles from '../../styles/AppStyles'; // Remove or update path
 // import {AppColors} from '../../utils'; // Remove or update path
 // import AppFonts from '../../utils/appFonts'; // Remove or update path
@@ -68,7 +69,7 @@ const AppStyles = {
   },
   body: {
     flex: 1,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: AppColors.background,
   },
   rowBetween: {
     flexDirection: 'row' as const,
@@ -81,9 +82,37 @@ const size = ((fontSize: number) => fontSize) as any;
 (size as any).default = 14;
 (size as any).xs = 12;
 (size as any).s = 14;
-const GlobalIcon = ({ name, size = 24, color = '#000' }: any) => (
-  <Text style={{ fontSize: size, color }}>{name}</Text>
-);
+const GlobalIcon = ({ library, name, size = 24, color = '#000' }: { library?: string; name: string; size?: number; color?: string }) => {
+  if (library === 'Ionicons') {
+    return <Ionicons name={name as any} size={size} color={color} />;
+  } else if (library === 'MaterialIcons') {
+    return <MaterialIcons name={name as any} size={size} color={color} />;
+  }
+  // Fallback to text representation
+  const iconMap: { [key: string]: string } = {
+    'arrow-back': '←',
+    'undo': '↶',
+    'open-in-full': '⤢',
+    'brush': '🖌️',
+    'text-fields': 'T',
+    'crop-square': '⬜',
+    'circle': '⭕',
+    'horizontal-rule': '─',
+    'arrow-forward': '→',
+    'format-color-fill': '🪣',
+    'check': '✓',
+    'close': '✕',
+    'add': '+',
+    'image': '🖼️',
+    'save': '💾',
+  };
+  
+  return (
+    <Text style={{ fontSize: size, color, textAlign: 'center', minWidth: size }}>
+      {iconMap[name] || name}
+    </Text>
+  );
+};
 
 const CANVAS_SIZE = screenWidth;
 const MIN_OVERLAY_SIZE = 60;
@@ -554,14 +583,15 @@ const ToolButton = ({
 
 // ─── ImageEditor ──────────────────────────────────────────────────────────────
 
-const ImageEditor = () => {
-  const navigation = useNavigation();
-  const route = useRoute();
-  const {imageUri, onSave} = route.params as {
-    imageUri: string;
-    onSave?: (uri: string) => void;
-  };
+interface ImageEditorProps {
+  imageUri?: string;
+  onSave?: (uri: string) => void;
+  onClose?: () => void;
+}
 
+export type { ImageEditorProps };
+
+const ImageEditor = ({ imageUri, onSave, onClose }: ImageEditorProps) => {
   const canvasRef = useRef<any>(null);
 
   // Image transforms
@@ -809,25 +839,81 @@ const ImageEditor = () => {
   };
 
   const handlePickImage = () => {
-    launchImageLibrary({mediaType: 'photo', quality: 1}, response => {
-      if (response.didCancel || response.errorCode) return;
-      const uri = response.assets?.[0]?.uri;
-      if (!uri) return;
-      pushHistory();
-      const id = Date.now().toString();
-      setImageOverlays(prev => [
-        ...prev,
+    try {
+      launchImageLibrary(
         {
-          id,
-          uri,
-          x: CANVAS_SIZE / 2 - INITIAL_OVERLAY_SIZE / 2,
-          y: CANVAS_SIZE / 2 - INITIAL_OVERLAY_SIZE / 2,
-          width: INITIAL_OVERLAY_SIZE,
-          height: INITIAL_OVERLAY_SIZE,
-        },
-      ]);
-      selectOverlay(id);
-    });
+          mediaType: 'photo', 
+          quality: 1,
+          includeBase64: false,
+          maxWidth: 2000,
+          maxHeight: 2000,
+        }, 
+        response => {
+          console.log('Image picker response:', response);
+          
+          // Handle various error scenarios
+          if (response.didCancel) {
+            console.log('User cancelled image picker');
+            return;
+          }
+          
+          if (response.errorCode) {
+            console.log('Image picker error:', response.errorCode, response.errorMessage);
+            Alert.alert('Error', `Failed to open gallery: ${response.errorMessage || 'Unknown error'}`);
+            return;
+          }
+          
+          // Add comprehensive null checks for response and assets
+          if (!response) {
+            console.log('Image picker: No response received');
+            Alert.alert('Error', 'Failed to open gallery. Please try again.');
+            return;
+          }
+          
+          if (!response.assets || response.assets.length === 0) {
+            console.log('Image picker: No assets available');
+            Alert.alert('No Images', 'No images found in gallery. Please select a different app.');
+            return;
+          }
+          
+          const asset = response.assets[0];
+          if (!asset) {
+            console.log('Image picker: Invalid asset structure');
+            Alert.alert('Error', 'Invalid image format. Please try again.');
+            return;
+          }
+          
+          if (!asset.uri) {
+            console.log('Image picker: Asset URI missing');
+            Alert.alert('Error', 'Selected image has no URI. Please try again.');
+            return;
+          }
+          
+          const uri = asset.uri;
+          console.log('Image picker: Successfully selected image:', uri);
+          pushHistory();
+          const id = Date.now().toString();
+          setImageOverlays(prev => [
+            ...prev,
+            {
+              id,
+              uri,
+              x: CANVAS_SIZE / 2 - INITIAL_OVERLAY_SIZE / 2,
+              y: CANVAS_SIZE / 2 - INITIAL_OVERLAY_SIZE / 2,
+              width: INITIAL_OVERLAY_SIZE,
+              height: INITIAL_OVERLAY_SIZE,
+            },
+          ]);
+          selectOverlay(id);
+        });
+    } catch (error) {
+      console.log('Image picker crashed:', error);
+      Alert.alert(
+        'Gallery Error', 
+        'Failed to open gallery. Please check app permissions and try again.',
+        [{ text: 'OK', onPress: () => {} }]
+      );
+    }
   };
 
   const handleRotate = () => {
@@ -941,7 +1027,7 @@ const ImageEditor = () => {
       await new Promise(resolve => setTimeout(resolve, 200));
       const uri = await captureRef(canvasRef, {format: 'jpg', quality: 0.95});
       onSave?.(uri);
-      navigation.goBack();
+      onClose?.();
     } catch (e) {
       console.log('ImageEditor capture error:', e);
     } finally {
@@ -966,7 +1052,7 @@ const ImageEditor = () => {
       {/* ── Header ── */}
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => navigation.goBack()}
+          onPress={onClose || (() => {})}
           style={styles.headerIconBtn}>
           <GlobalIcon
             library="Ionicons"
@@ -1007,11 +1093,13 @@ const ImageEditor = () => {
       <View style={styles.canvasWrapper}>
         <View ref={canvasRef} collapsable={false} style={styles.canvas}>
           {/* Background image */}
-          <Image
-            source={{uri: imageUri}}
-            style={[styles.canvasImage, imageTransform]}
-            resizeMode="cover"
-          />
+          {imageUri && (
+            <Image
+              source={{uri: imageUri}}
+              style={[styles.canvasImage, imageTransform]}
+              resizeMode="cover"
+            />
+          )}
 
           {/* Draw SVG layer (freehand paths + shape preview) */}
           <Svg style={StyleSheet.absoluteFill}>
@@ -1213,6 +1301,7 @@ const ImageEditor = () => {
             icon="photo-library"
             label="Gallery"
             active={false}
+            disabled={true}
             onPress={handlePickImage}
           />
           <ToolButton
