@@ -55,6 +55,12 @@
   "publishConfig": {
     "registry": "https://registry.npmjs.org/"
   },
+  "dependencies": {
+    "@react-navigation/native": "^6.1.18",
+    "react-native-image-picker": "^7.1.2",
+    "react-native-svg": "^15.8.0",
+    "react-native-view-shot": "^3.8.0"
+  },
   "devDependencies": {
     "@react-native/babel-preset": "0.83.0",
     "@types/react": "^19.1.12",

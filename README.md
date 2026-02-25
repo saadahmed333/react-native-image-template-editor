@@ -12,13 +12,19 @@ npm install react-native-image-template-editor
 
 ## Usage
 
+```jsx
+import React from 'react';
+import { ImageEditor } from 'react-native-image-template-editor';
 
-```js
-import { multiply } from 'react-native-image-template-editor';
+const MyComponent = () => {
+  return (
+    <ImageEditor
+      // Add your props here
+    />
+  );
+};
 
-// ...
-
-const result = await multiply(3, 7);
+export default MyComponent;
 ```
 
 
