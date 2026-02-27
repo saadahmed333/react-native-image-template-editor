@@ -5,9 +5,9 @@ A React Native component for creating and editing image templates with drawing, 
 ## Result
 
 <p align="center">
-  <img src="assets/image1.png" width="45%" />
+  <img src="assets/image1.png" width="200" />
   &nbsp;&nbsp;
-  <img src="assets/image2.png" width="45%" />
+  <img src="assets/image2.png" width="200" />
 </p>
 
 ## 📦 **Installation**

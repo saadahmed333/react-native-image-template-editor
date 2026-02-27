@@ -1,6 +1,6 @@
 {
   "name": "react-native-image-template-editor",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "A powerful React Native component for creating and editing image templates with drawing, text, shapes, and image overlays. Features comprehensive error handling, professional vector icons, and extensive customization options. Gallery icon functionality allows users to select images from device gallery with comprehensive error handling and user-friendly error messages.",
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",
