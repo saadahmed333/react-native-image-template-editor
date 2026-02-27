@@ -13,17 +13,20 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
-import Svg, {Rect, Ellipse, Line, Path} from 'react-native-svg';
+import Svg, {
+  Rect,
+  Ellipse,
+  Line,
+  Path,
+  Polygon,
+  Defs,
+  ClipPath,
+  Image as SvgImage,
+} from 'react-native-svg';
 import {captureRef} from 'react-native-view-shot';
 import {launchImageLibrary} from 'react-native-image-picker';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-// import AppStyles from '../../styles/AppStyles'; // Remove or update path
-// import {AppColors} from '../../utils'; // Remove or update path
-// import AppFonts from '../../utils/appFonts'; // Remove or update path
-// import {hp, screenWidth} from '../../utils/constant'; // Remove or update path
-// import GlobalIcon from '../../components/GlobalIcon'; // Remove or update path
-// import {size} from '../../utils/responsiveFonts'; // Remove or update path
 
 // Basic constants to replace missing imports
 const screenWidth = 375; // Default iPhone width
@@ -82,42 +85,17 @@ const size = ((fontSize: number) => fontSize) as any;
 (size as any).default = 14;
 (size as any).xs = 12;
 (size as any).s = 14;
-const GlobalIcon = ({ library, name, size = 24, color = '#000' }: { library?: string; name: string; size?: number; color?: string }) => {
-  if (library === 'Ionicons') {
-    return <Ionicons name={name as any} size={size} color={color} />;
-  } else if (library === 'MaterialIcons') {
-    return <MaterialIcons name={name as any} size={size} color={color} />;
-  }
-  // Fallback to text representation
-  const iconMap: { [key: string]: string } = {
-    'arrow-back': '←',
-    'undo': '↶',
-    'open-in-full': '⤢',
-    'brush': '🖌️',
-    'text-fields': 'T',
-    'crop-square': '⬜',
-    'circle': '⭕',
-    'horizontal-rule': '─',
-    'arrow-forward': '→',
-    'format-color-fill': '🪣',
-    'check': '✓',
-    'close': '✕',
-    'add': '+',
-    'image': '🖼️',
-    'save': '💾',
-  };
-  
-  return (
-    <Text style={{ fontSize: size, color, textAlign: 'center', minWidth: size }}>
-      {iconMap[name] || name}
-    </Text>
-  );
-};
 
 const CANVAS_SIZE = screenWidth;
 const MIN_OVERLAY_SIZE = 60;
 const INITIAL_OVERLAY_SIZE = 160;
 const RESIZE_HANDLE_HIT = 32;
+const CROP_INITIAL = {
+  x: CANVAS_SIZE * 0.1,
+  y: CANVAS_SIZE * 0.1,
+  width: CANVAS_SIZE * 0.8,
+  height: CANVAS_SIZE * 0.8,
+};
 
 const COLORS = [
   '#FFFFFF',
@@ -129,12 +107,59 @@ const COLORS = [
   '#FF0066',
   '#00CFFF',
   '#A855F7',
+  '#F97316',
+  '#EF4444',
+  '#EC4899',
+  '#8B5CF6',
+  '#6366F1',
+  '#3B82F6',
+  '#06B6D4',
+  '#14B8A6',
+  '#22C55E',
+  '#84CC16',
+  '#EAB308',
+  '#F59E0B',
+  '#78350F',
+  '#7F1D1D',
+  '#4C1D95',
+  '#1E3A8A',
+  '#064E3B',
+  '#365314',
+  '#831843',
+  '#FECACA',
+  '#FED7AA',
+  '#FEF08A',
+  '#BBF7D0',
+  '#BAE6FD',
+  '#DDD6FE',
+  '#FBCFE8',
+  '#D1FAE5',
+  '#E0F2FE',
+  '#F3F4F6',
+  '#6B7280',
+  '#374151',
 ];
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type ToolType = 'none' | 'draw' | 'text' | 'shape' | 'image';
-type ShapeType = 'rectangle' | 'oval' | 'line' | 'arrow';
+type ToolType = 'none' | 'draw' | 'text' | 'shape' | 'image' | 'crop';
+type ShapeType =
+  | 'rectangle'
+  | 'oval'
+  | 'line'
+  | 'arrow'
+  | 'triangle'
+  | 'star'
+  | 'diamond'
+  | 'pentagon'
+  | 'hexagon'
+  | 'heart'
+  | 'cross'
+  | 'rounded-rect'
+  | 'parallelogram'
+  | 'octagon';
+
+type ClipShapeType = 'none' | Exclude<ShapeType, 'line' | 'arrow'>;
 
 interface TextItem {
   id: string;
@@ -154,6 +179,7 @@ interface ImageOverlayItem {
   y: number;
   width: number;
   height: number;
+  clipShape: ClipShapeType;
 }
 
 interface DrawPath {
@@ -245,6 +271,103 @@ const DraggableText = ({
   );
 };
 
+// ─── SVG path helpers ─────────────────────────────────────────────────────────
+
+const regularPolygonPoints = (
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+  sides: number,
+): string => {
+  const pts: string[] = [];
+  for (let i = 0; i < sides; i++) {
+    const angle = (i * 2 * Math.PI) / sides - Math.PI / 2;
+    pts.push(
+      `${(cx + rx * Math.cos(angle)).toFixed(1)},${(
+        cy +
+        ry * Math.sin(angle)
+      ).toFixed(1)}`,
+    );
+  }
+  return pts.join(' ');
+};
+
+const buildStarPath = (
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+): string => {
+  const irx = rx * 0.4;
+  const iry = ry * 0.4;
+  let d = '';
+  for (let i = 0; i < 10; i++) {
+    const angle = (i * Math.PI) / 5 - Math.PI / 2;
+    const ex = i % 2 === 0 ? rx : irx;
+    const ey = i % 2 === 0 ? ry : iry;
+    const px = (cx + ex * Math.cos(angle)).toFixed(1);
+    const py = (cy + ey * Math.sin(angle)).toFixed(1);
+    d += i === 0 ? `M${px},${py}` : `L${px},${py}`;
+  }
+  return d + 'Z';
+};
+
+const buildHeartPath = (
+  px: number,
+  py: number,
+  w: number,
+  h: number,
+): string => {
+  const X = (t: number) => (px + t * w).toFixed(1);
+  const Y = (t: number) => (py + t * h).toFixed(1);
+  return [
+    `M${X(0.5)},${Y(0.35)}`,
+    `C${X(0.5)},${Y(0.2)} ${X(0.3)},${Y(0.15)} ${X(0.2)},${Y(0.25)}`,
+    `C${X(0.1)},${Y(0.35)} ${X(0.12)},${Y(0.48)} ${X(0.25)},${Y(0.58)}`,
+    `L${X(0.5)},${Y(0.82)}`,
+    `L${X(0.75)},${Y(0.58)}`,
+    `C${X(0.88)},${Y(0.48)} ${X(0.9)},${Y(0.35)} ${X(0.8)},${Y(0.25)}`,
+    `C${X(0.7)},${Y(0.15)} ${X(0.5)},${Y(0.2)} ${X(0.5)},${Y(0.35)}Z`,
+  ].join(' ');
+};
+
+// Returns an SVG shape element in 0-100 normalized coordinate space for ClipPath
+const buildClipPathShape = (
+  shape: Exclude<ClipShapeType, 'none'>,
+): React.ReactElement | null => {
+  switch (shape) {
+    case 'rectangle':
+      return <Rect x={0} y={0} width={100} height={100} />;
+    case 'rounded-rect':
+      return <Rect x={0} y={0} width={100} height={100} rx={20} ry={20} />;
+    case 'oval':
+      return <Ellipse cx={50} cy={50} rx={50} ry={50} />;
+    case 'triangle':
+      return <Polygon points="50,2 2,98 98,98" />;
+    case 'diamond':
+      return <Polygon points="50,2 98,50 50,98 2,50" />;
+    case 'star':
+      return <Path d={buildStarPath(50, 50, 48, 48)} />;
+    case 'heart':
+      return <Path d={buildHeartPath(2, 4, 96, 92)} />;
+    case 'pentagon':
+      return <Polygon points={regularPolygonPoints(50, 54, 48, 46, 5)} />;
+    case 'hexagon':
+      return <Polygon points={regularPolygonPoints(50, 50, 48, 48, 6)} />;
+    case 'cross':
+      return (
+        <Path d="M33,0 L67,0 L67,33 L100,33 L100,67 L67,67 L67,100 L33,100 L33,67 L0,67 L0,33 L33,33 Z" />
+      );
+    case 'parallelogram':
+      return <Polygon points="20,0 100,0 80,100 0,100" />;
+    case 'octagon':
+      return <Polygon points={regularPolygonPoints(50, 50, 48, 48, 8)} />;
+    default:
+      return null;
+  }
+};
+
 // ─── DraggableImage ───────────────────────────────────────────────────────────
 
 const DraggableImage = ({
@@ -323,11 +446,33 @@ const DraggableImage = ({
         isSelected && styles.imageOverlaySelected,
       ]}
       {...dragResponder.panHandlers}>
-      <Image
-        source={{uri: item.uri}}
-        style={styles.overlayImage}
-        resizeMode="cover"
-      />
+      {item.clipShape !== 'none' ? (
+        <Svg
+          style={StyleSheet.absoluteFill}
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none">
+          <Defs>
+            <ClipPath id={`clip-${item.id}-${item.clipShape}`}>
+              {buildClipPathShape(item.clipShape as Exclude<ClipShapeType, 'none'>)}
+            </ClipPath>
+          </Defs>
+          <SvgImage
+            x={0}
+            y={0}
+            width={100}
+            height={100}
+            href={item.uri}
+            clipPath={`url(#clip-${item.id}-${item.clipShape})`}
+            preserveAspectRatio="xMidYMid slice"
+          />
+        </Svg>
+      ) : (
+        <Image
+          source={{uri: item.uri}}
+          style={styles.overlayImage}
+          resizeMode="cover"
+        />
+      )}
       {isSelected && (
         <View
           style={styles.resizeHandle}
@@ -338,8 +483,7 @@ const DraggableImage = ({
             right: RESIZE_HANDLE_HIT,
           }}
           {...resizeResponder.panHandlers}>
-          <GlobalIcon
-            library="MaterialIcons"
+          <MaterialIcons
             name="open-in-full"
             size={12}
             color={AppColors.white}
@@ -349,6 +493,34 @@ const DraggableImage = ({
     </Animated.View>
   );
 };
+
+// ─── Shape panel config ───────────────────────────────────────────────────────
+
+const SHAPE_PANEL_CONFIG: {type: ShapeType; icon: string; label: string}[] = [
+  {type: 'rectangle', icon: 'crop-square', label: 'Rect'},
+  {type: 'rounded-rect', icon: 'rounded-corner', label: 'Round'},
+  {type: 'oval', icon: 'radio-button-unchecked', label: 'Oval'},
+  {type: 'triangle', icon: 'change-history', label: 'Triangle'},
+  {type: 'diamond', icon: 'diamond', label: 'Diamond'},
+  {type: 'star', icon: 'star-border', label: 'Star'},
+  {type: 'heart', icon: 'favorite-border', label: 'Heart'},
+  {type: 'pentagon', icon: 'pentagon', label: 'Penta'},
+  {type: 'hexagon', icon: 'hexagon', label: 'Hexa'},
+  {type: 'octagon', icon: 'octagon', label: 'Octa'},
+  {type: 'cross', icon: 'add', label: 'Cross'},
+  {type: 'parallelogram', icon: 'view-day', label: 'Para'},
+  {type: 'line', icon: 'remove', label: 'Line'},
+  {type: 'arrow', icon: 'arrow-forward', label: 'Arrow'},
+];
+
+// ─── Image clip panel config ──────────────────────────────────────────────────
+
+const CLIP_PANEL_CONFIG: {key: ClipShapeType; icon: string; label: string}[] = [
+  {key: 'none', icon: 'image', label: 'None'},
+  ...SHAPE_PANEL_CONFIG.filter(
+    s => s.type !== 'line' && s.type !== 'arrow',
+  ).map(s => ({key: s.type as ClipShapeType, icon: s.icon, label: s.label})),
+];
 
 // ─── DraggableShape ───────────────────────────────────────────────────────────
 
@@ -501,6 +673,177 @@ const DraggableShape = ({
         </Svg>
       );
     }
+    if (item.type === 'triangle') {
+      return (
+        <Svg width={w + pad * 2} height={h + pad * 2}>
+          <Polygon
+            points={`${(pad + w / 2).toFixed(1)},${pad} ${pad},${pad + h} ${
+              pad + w
+            },${pad + h}`}
+            stroke={color}
+            strokeWidth={sw}
+            fill={fill}
+            strokeLinejoin="round"
+          />
+        </Svg>
+      );
+    }
+    if (item.type === 'star') {
+      const cx = pad + w / 2;
+      const cy = pad + h / 2;
+      return (
+        <Svg width={w + pad * 2} height={h + pad * 2}>
+          <Path
+            d={buildStarPath(cx, cy, w / 2, h / 2)}
+            stroke={color}
+            strokeWidth={sw}
+            fill={fill}
+            strokeLinejoin="round"
+          />
+        </Svg>
+      );
+    }
+    if (item.type === 'diamond') {
+      const cx = pad + w / 2;
+      const cy = pad + h / 2;
+      return (
+        <Svg width={w + pad * 2} height={h + pad * 2}>
+          <Polygon
+            points={`${cx},${pad} ${pad + w},${cy} ${cx},${
+              pad + h
+            } ${pad},${cy}`}
+            stroke={color}
+            strokeWidth={sw}
+            fill={fill}
+            strokeLinejoin="round"
+          />
+        </Svg>
+      );
+    }
+    if (item.type === 'pentagon') {
+      const cx = pad + w / 2;
+      const cy = pad + h / 2;
+      return (
+        <Svg width={w + pad * 2} height={h + pad * 2}>
+          <Polygon
+            points={regularPolygonPoints(cx, cy, w / 2, h / 2, 5)}
+            stroke={color}
+            strokeWidth={sw}
+            fill={fill}
+            strokeLinejoin="round"
+          />
+        </Svg>
+      );
+    }
+    if (item.type === 'hexagon') {
+      const cx = pad + w / 2;
+      const cy = pad + h / 2;
+      return (
+        <Svg width={w + pad * 2} height={h + pad * 2}>
+          <Polygon
+            points={regularPolygonPoints(cx, cy, w / 2, h / 2, 6)}
+            stroke={color}
+            strokeWidth={sw}
+            fill={fill}
+            strokeLinejoin="round"
+          />
+        </Svg>
+      );
+    }
+    if (item.type === 'heart') {
+      return (
+        <Svg width={w + pad * 2} height={h + pad * 2}>
+          <Path
+            d={buildHeartPath(pad, pad, w, h)}
+            stroke={color}
+            strokeWidth={sw}
+            fill={fill}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        </Svg>
+      );
+    }
+    if (item.type === 'cross') {
+      const tx = w / 3;
+      const ty = h / 3;
+      const d = [
+        `M${(pad + tx).toFixed(1)},${pad}`,
+        `L${(pad + w - tx).toFixed(1)},${pad}`,
+        `L${(pad + w - tx).toFixed(1)},${(pad + ty).toFixed(1)}`,
+        `L${(pad + w).toFixed(1)},${(pad + ty).toFixed(1)}`,
+        `L${(pad + w).toFixed(1)},${(pad + h - ty).toFixed(1)}`,
+        `L${(pad + w - tx).toFixed(1)},${(pad + h - ty).toFixed(1)}`,
+        `L${(pad + w - tx).toFixed(1)},${(pad + h).toFixed(1)}`,
+        `L${(pad + tx).toFixed(1)},${(pad + h).toFixed(1)}`,
+        `L${(pad + tx).toFixed(1)},${(pad + h - ty).toFixed(1)}`,
+        `L${pad},${(pad + h - ty).toFixed(1)}`,
+        `L${pad},${(pad + ty).toFixed(1)}`,
+        `L${(pad + tx).toFixed(1)},${(pad + ty).toFixed(1)}Z`,
+      ].join(' ');
+      return (
+        <Svg width={w + pad * 2} height={h + pad * 2}>
+          <Path
+            d={d}
+            stroke={color}
+            strokeWidth={sw}
+            fill={fill}
+            strokeLinejoin="round"
+          />
+        </Svg>
+      );
+    }
+    if (item.type === 'rounded-rect') {
+      const r = Math.min(w, h) * 0.2;
+      return (
+        <Svg width={w + pad * 2} height={h + pad * 2}>
+          <Rect
+            x={pad}
+            y={pad}
+            width={w}
+            height={h}
+            rx={r}
+            ry={r}
+            stroke={color}
+            strokeWidth={sw}
+            fill={fill}
+          />
+        </Svg>
+      );
+    }
+    if (item.type === 'parallelogram') {
+      const skew = w * 0.2;
+      return (
+        <Svg width={w + pad * 2} height={h + pad * 2}>
+          <Polygon
+            points={`${(pad + skew).toFixed(1)},${pad} ${pad + w},${pad} ${(
+              pad +
+              w -
+              skew
+            ).toFixed(1)},${pad + h} ${pad},${pad + h}`}
+            stroke={color}
+            strokeWidth={sw}
+            fill={fill}
+            strokeLinejoin="round"
+          />
+        </Svg>
+      );
+    }
+    if (item.type === 'octagon') {
+      const cx = pad + w / 2;
+      const cy = pad + h / 2;
+      return (
+        <Svg width={w + pad * 2} height={h + pad * 2}>
+          <Polygon
+            points={regularPolygonPoints(cx, cy, w / 2, h / 2, 8)}
+            stroke={color}
+            strokeWidth={sw}
+            fill={fill}
+            strokeLinejoin="round"
+          />
+        </Svg>
+      );
+    }
     return null;
   };
 
@@ -523,8 +866,7 @@ const DraggableShape = ({
             right: RESIZE_HANDLE_HIT,
           }}
           {...resizeResponder.panHandlers}>
-          <GlobalIcon
-            library="MaterialIcons"
+          <MaterialIcons
             name="open-in-full"
             size={10}
             color={AppColors.white}
@@ -569,8 +911,7 @@ const ToolButton = ({
       style={[styles.toolBtn, active && styles.toolBtnActive]}>
       <View
         style={iconRotate ? {transform: [{rotate: iconRotate}]} : undefined}>
-        <GlobalIcon
-          library="MaterialIcons"
+        <MaterialIcons
           name={icon as any}
           size={22}
           color={iconColor}
@@ -593,6 +934,9 @@ export type { ImageEditorProps };
 
 const ImageEditor = ({ imageUri, onSave, onClose }: ImageEditorProps) => {
   const canvasRef = useRef<any>(null);
+
+  // Base image (stateful so crop can update it)
+  const [currentImageUri, setCurrentImageUri] = useState(imageUri);
 
   // Image transforms
   const [rotation, setRotation] = useState(0);
@@ -647,6 +991,14 @@ const ImageEditor = ({ imageUri, onSave, onClose }: ImageEditorProps) => {
   // Undo history
   const [history, setHistory] = useState<Snapshot[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Crop
+  const cropBoxRef = useRef(CROP_INITIAL);
+  const [cropBox, setCropBox] = useState(CROP_INITIAL);
+  const cropDragStartRef = useRef({x: 0, y: 0});
+  const cropResizeStartRef = useRef({width: 0, height: 0});
+  const [cropStagingUri, setCropStagingUri] = useState('');
+  const cropCaptureRef = useRef<any>(null);
 
   const hasSelection = selectedTextId || selectedOverlayId || selectedShapeId;
 
@@ -733,24 +1085,86 @@ const ImageEditor = ({ imageUri, onSave, onClose }: ImageEditorProps) => {
         setLiveDrawPath(next);
       },
       onPanResponderRelease: () => {
-        if (currentPathRef.current) {
-          setDrawPaths(prev => {
-            const updated = [
-              ...prev,
-              {
-                id: Date.now().toString(),
-                points: currentPathRef.current,
-                color: strokeColorRef.current,
-                strokeWidth: strokeWidthRef.current,
-              },
-            ];
-            return updated;
-          });
-        }
+        const completedPath = currentPathRef.current;
+        const completedColor = strokeColorRef.current;
+        const completedStrokeWidth = strokeWidthRef.current;
         currentPathRef.current = '';
         setLiveDrawPath('');
         setIsDrawing(false);
+        if (completedPath) {
+          setDrawPaths(prev => [...prev, {
+            id: Date.now().toString(),
+            points: completedPath,
+            color: completedColor,
+            strokeWidth: completedStrokeWidth,
+          }]);
+        }
       },
+    }),
+  ).current;
+
+  // ── Crop PanResponders ───────────────────────────────────────────────────────
+
+  const cropDragResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        cropDragStartRef.current = {
+          x: cropBoxRef.current.x,
+          y: cropBoxRef.current.y,
+        };
+      },
+      onPanResponderMove: (_, gs) => {
+        const newX = Math.max(
+          0,
+          Math.min(
+            CANVAS_SIZE - cropBoxRef.current.width,
+            cropDragStartRef.current.x + gs.dx,
+          ),
+        );
+        const newY = Math.max(
+          0,
+          Math.min(
+            CANVAS_SIZE - cropBoxRef.current.height,
+            cropDragStartRef.current.y + gs.dy,
+          ),
+        );
+        cropBoxRef.current = {...cropBoxRef.current, x: newX, y: newY};
+        setCropBox(prev => ({...prev, x: newX, y: newY}));
+      },
+      onPanResponderRelease: () => {},
+    }),
+  ).current;
+
+  const cropResizeResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: () => {
+        cropResizeStartRef.current = {
+          width: cropBoxRef.current.width,
+          height: cropBoxRef.current.height,
+        };
+      },
+      onPanResponderMove: (_, gs) => {
+        const newW = Math.max(
+          60,
+          Math.min(
+            CANVAS_SIZE - cropBoxRef.current.x,
+            cropResizeStartRef.current.width + gs.dx,
+          ),
+        );
+        const newH = Math.max(
+          60,
+          Math.min(
+            CANVAS_SIZE - cropBoxRef.current.y,
+            cropResizeStartRef.current.height + gs.dy,
+          ),
+        );
+        cropBoxRef.current = {...cropBoxRef.current, width: newW, height: newH};
+        setCropBox(prev => ({...prev, width: newW, height: newH}));
+      },
+      onPanResponderRelease: () => {},
     }),
   ).current;
 
@@ -761,6 +1175,10 @@ const ImageEditor = ({ imageUri, onSave, onClose }: ImageEditorProps) => {
     setActiveTool(prev => {
       const next = prev === tool ? 'none' : tool;
       setShowShapePanel(next === 'shape');
+      if (next === 'crop') {
+        cropBoxRef.current = CROP_INITIAL;
+        setCropBox(CROP_INITIAL);
+      }
       return next;
     });
   };
@@ -838,57 +1256,66 @@ const ImageEditor = ({ imageUri, onSave, onClose }: ImageEditorProps) => {
     setShapeFilled(val);
   };
 
+  const updateImageClipShape = (shape: ClipShapeType) => {
+    if (!selectedOverlayId) return;
+    setImageOverlays(prev =>
+      prev.map(img =>
+        img.id === selectedOverlayId ? {...img, clipShape: shape} : img,
+      ),
+    );
+  };
+
   const handlePickImage = () => {
     try {
       launchImageLibrary(
         {
-          mediaType: 'photo', 
+          mediaType: 'photo',
           quality: 1,
           includeBase64: false,
           maxWidth: 2000,
           maxHeight: 2000,
-        }, 
+        },
         response => {
           console.log('Image picker response:', response);
-          
+
           // Handle various error scenarios
           if (response.didCancel) {
             console.log('User cancelled image picker');
             return;
           }
-          
+
           if (response.errorCode) {
             console.log('Image picker error:', response.errorCode, response.errorMessage);
             Alert.alert('Error', `Failed to open gallery: ${response.errorMessage || 'Unknown error'}`);
             return;
           }
-          
+
           // Add comprehensive null checks for response and assets
           if (!response) {
             console.log('Image picker: No response received');
             Alert.alert('Error', 'Failed to open gallery. Please try again.');
             return;
           }
-          
+
           if (!response.assets || response.assets.length === 0) {
             console.log('Image picker: No assets available');
             Alert.alert('No Images', 'No images found in gallery. Please select a different app.');
             return;
           }
-          
+
           const asset = response.assets[0];
           if (!asset) {
             console.log('Image picker: Invalid asset structure');
             Alert.alert('Error', 'Invalid image format. Please try again.');
             return;
           }
-          
+
           if (!asset.uri) {
             console.log('Image picker: Asset URI missing');
             Alert.alert('Error', 'Selected image has no URI. Please try again.');
             return;
           }
-          
+
           const uri = asset.uri;
           console.log('Image picker: Successfully selected image:', uri);
           pushHistory();
@@ -902,6 +1329,7 @@ const ImageEditor = ({ imageUri, onSave, onClose }: ImageEditorProps) => {
               y: CANVAS_SIZE / 2 - INITIAL_OVERLAY_SIZE / 2,
               width: INITIAL_OVERLAY_SIZE,
               height: INITIAL_OVERLAY_SIZE,
+              clipShape: 'none',
             },
           ]);
           selectOverlay(id);
@@ -909,7 +1337,7 @@ const ImageEditor = ({ imageUri, onSave, onClose }: ImageEditorProps) => {
     } catch (error) {
       console.log('Image picker crashed:', error);
       Alert.alert(
-        'Gallery Error', 
+        'Gallery Error',
         'Failed to open gallery. Please check app permissions and try again.',
         [{ text: 'OK', onPress: () => {} }]
       );
@@ -1019,6 +1447,37 @@ const ImageEditor = ({ imageUri, onSave, onClose }: ImageEditorProps) => {
     ]);
   };
 
+  const applyCrop = async () => {
+    try {
+      setIsSaving(true);
+      deselectAll();
+      setActiveTool('none');
+      await new Promise(r => setTimeout(r, 200));
+      const fullUri = await captureRef(canvasRef, {format: 'png', quality: 1});
+      // Step 2: stage the crop region in the hidden capture view
+      setCropStagingUri(fullUri);
+      await new Promise(r => setTimeout(r, 300));
+      const croppedUri = await captureRef(cropCaptureRef, {format: 'jpg', quality: 1});
+      pushHistory();
+      setCurrentImageUri(croppedUri);
+      setTexts([]);
+      setImageOverlays([]);
+      setDrawPaths([]);
+      setShapes([]);
+      deselectAll();
+      setRotation(0);
+      setFlipH(false);
+      setFlipV(false);
+      cropBoxRef.current = CROP_INITIAL;
+      setCropBox(CROP_INITIAL);
+      setCropStagingUri('');
+    } catch (e) {
+      console.log('Crop error:', e);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleSave = async () => {
     try {
       setIsSaving(true);
@@ -1054,21 +1513,18 @@ const ImageEditor = ({ imageUri, onSave, onClose }: ImageEditorProps) => {
         <TouchableOpacity
           onPress={onClose || (() => {})}
           style={styles.headerIconBtn}>
-          <GlobalIcon
-            library="Ionicons"
+          <Ionicons
             name="arrow-back"
             size={24}
             color={AppColors.black}
           />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Edit Image</Text>
         <View style={styles.headerRight}>
           <TouchableOpacity
             onPress={handleUndo}
             disabled={history.length === 0}
             style={styles.headerIconBtn}>
-            <GlobalIcon
-              library="MaterialIcons"
+            <MaterialIcons
               name="undo"
               size={24}
               color={
@@ -1093,9 +1549,9 @@ const ImageEditor = ({ imageUri, onSave, onClose }: ImageEditorProps) => {
       <View style={styles.canvasWrapper}>
         <View ref={canvasRef} collapsable={false} style={styles.canvas}>
           {/* Background image */}
-          {imageUri && (
+          {currentImageUri && (
             <Image
-              source={{uri: imageUri}}
+              source={{uri: currentImageUri}}
               style={[styles.canvasImage, imageTransform]}
               resizeMode="cover"
             />
@@ -1164,68 +1620,210 @@ const ImageEditor = ({ imageUri, onSave, onClose }: ImageEditorProps) => {
               {...drawPanResponder.panHandlers}
             />
           )}
+
+          {/* Crop overlay */}
+          {activeTool === 'crop' && (
+            <View
+              style={StyleSheet.absoluteFill}
+              pointerEvents="box-none">
+              {/* Dark mask – top */}
+              <View
+                style={[
+                  styles.cropDim,
+                  {top: 0, left: 0, right: 0, height: cropBox.y},
+                ]}
+              />
+              {/* Dark mask – bottom */}
+              <View
+                style={[
+                  styles.cropDim,
+                  {
+                    top: cropBox.y + cropBox.height,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                  },
+                ]}
+              />
+              {/* Dark mask – left */}
+              <View
+                style={[
+                  styles.cropDim,
+                  {
+                    top: cropBox.y,
+                    left: 0,
+                    width: cropBox.x,
+                    height: cropBox.height,
+                  },
+                ]}
+              />
+              {/* Dark mask – right */}
+              <View
+                style={[
+                  styles.cropDim,
+                  {
+                    top: cropBox.y,
+                    left: cropBox.x + cropBox.width,
+                    right: 0,
+                    height: cropBox.height,
+                  },
+                ]}
+              />
+              {/* Crop selection box (drag to move) */}
+              <View
+                style={[
+                  styles.cropBox,
+                  {
+                    top: cropBox.y,
+                    left: cropBox.x,
+                    width: cropBox.width,
+                    height: cropBox.height,
+                  },
+                ]}
+                {...cropDragResponder.panHandlers}>
+                {/* Corner lines for visual polish */}
+                <View style={[styles.cropCorner, styles.cropCornerTL]} />
+                <View style={[styles.cropCorner, styles.cropCornerTR]} />
+                <View style={[styles.cropCorner, styles.cropCornerBL]} />
+                {/* Resize handle – bottom-right corner */}
+                <View
+                  style={styles.cropResizeHandle}
+                  hitSlop={{
+                    top: RESIZE_HANDLE_HIT,
+                    left: RESIZE_HANDLE_HIT,
+                    bottom: RESIZE_HANDLE_HIT,
+                    right: RESIZE_HANDLE_HIT,
+                  }}
+                  {...cropResizeResponder.panHandlers}>
+                  <MaterialIcons name="open-in-full" size={12} color="#FFFFFF" />
+                </View>
+              </View>
+            </View>
+          )}
         </View>
+      </View>
+
+      {/* Hidden crop staging view – always mounted so ref is valid */}
+      <View
+        ref={cropCaptureRef}
+        collapsable={false}
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          opacity: 0.001,
+          width: Math.max(1, Math.round(cropBox.width)),
+          height: Math.max(1, Math.round(cropBox.height)),
+          overflow: 'hidden',
+          top: 0,
+          left: 0,
+          zIndex: -1,
+        }}>
+        {cropStagingUri ? (
+          <Image
+            source={{uri: cropStagingUri}}
+            style={{
+              position: 'absolute',
+              left: -Math.round(cropBox.x),
+              top: -Math.round(cropBox.y),
+              width: CANVAS_SIZE,
+              height: CANVAS_SIZE,
+            }}
+            resizeMode="cover"
+          />
+        ) : null}
       </View>
 
       {/* ── Shape Type Panel ── */}
       {showShapePanel && (
-        <View style={styles.shapePanel}>
-          {(['rectangle', 'oval', 'line', 'arrow'] as ShapeType[]).map(type => (
+        <View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.shapePanelOuter}
+            contentContainerStyle={styles.shapePanelInner}>
+            {SHAPE_PANEL_CONFIG.map(({type, icon, label}) => {
+              const active = activeShapeType === type;
+              return (
+                <TouchableOpacity
+                  key={type}
+                  onPress={() => handleAddShape(type)}
+                  style={[
+                    styles.shapePanelBtn,
+                    active && styles.shapePanelBtnActive,
+                  ]}>
+                  <MaterialIcons
+                    name={icon as any}
+                    size={22}
+                    color={active ? AppColors.white : AppColors.black}
+                  />
+                  <Text
+                    style={[
+                      styles.shapePanelLabel,
+                      active && styles.shapePanelLabelActive,
+                    ]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+            {/* Fill toggle */}
             <TouchableOpacity
-              key={type}
-              onPress={() => handleAddShape(type)}
+              onPress={() => updateShapeFilled(!shapeFilled)}
               style={[
                 styles.shapePanelBtn,
-                activeShapeType === type && styles.shapePanelBtnActive,
+                shapeFilled && styles.shapePanelBtnActive,
               ]}>
-              <GlobalIcon
-                library="MaterialIcons"
-                name={
-                  type === 'rectangle'
-                    ? 'crop-square'
-                    : type === 'oval'
-                    ? 'radio-button-unchecked'
-                    : type === 'line'
-                    ? 'remove'
-                    : 'arrow-forward'
-                }
+              <MaterialIcons
+                name="format-color-fill"
                 size={22}
-                color={
-                  activeShapeType === type ? AppColors.white : AppColors.black
-                }
+                color={shapeFilled ? AppColors.white : AppColors.black}
               />
               <Text
                 style={[
                   styles.shapePanelLabel,
-                  activeShapeType === type && styles.shapePanelLabelActive,
+                  shapeFilled && styles.shapePanelLabelActive,
                 ]}>
-                {type === 'rectangle'
-                  ? 'Rect'
-                  : type.charAt(0).toUpperCase() + type.slice(1)}
+                Fill
               </Text>
             </TouchableOpacity>
-          ))}
-          {/* Fill toggle */}
-          <TouchableOpacity
-            onPress={() => updateShapeFilled(!shapeFilled)}
-            style={[
-              styles.shapePanelBtn,
-              shapeFilled && styles.shapePanelBtnActive,
-            ]}>
-            <GlobalIcon
-              library="MaterialIcons"
-              name="format-color-fill"
-              size={22}
-              color={shapeFilled ? AppColors.white : AppColors.black}
-            />
-            <Text
-              style={[
-                styles.shapePanelLabel,
-                shapeFilled && styles.shapePanelLabelActive,
-              ]}>
-              Fill
-            </Text>
-          </TouchableOpacity>
+          </ScrollView>
+        </View>
+      )}
+
+      {/* ── Image Clip Panel ── */}
+      {selectedOverlayId && (() => {
+        const overlay = imageOverlays.find(img => img.id === selectedOverlayId);
+        const currentClip = overlay?.clipShape ?? 'none';
+        return (
+          <View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.shapePanelOuter} contentContainerStyle={styles.shapePanelInner}>
+              {CLIP_PANEL_CONFIG.map(({key, icon, label}) => {
+                const active = currentClip === key;
+                return (
+                  <TouchableOpacity key={key} onPress={() => updateImageClipShape(key)}
+                    style={[styles.shapePanelBtn, active && styles.shapePanelBtnActive]}>
+                    <MaterialIcons name={icon as any} size={22} color={active ? '#FFFFFF' : '#000000'} />
+                    <Text style={[styles.shapePanelLabel, active && styles.shapePanelLabelActive]}>{label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        );
+      })()}
+
+      {/* ── Crop Panel (Apply / Cancel) ── */}
+      {activeTool === 'crop' && (
+        <View style={styles.cropPanel}>
+          <Text style={styles.cropPanelHint}>Drag to move · corner to resize</Text>
+          <View style={styles.cropPanelBtns}>
+            <TouchableOpacity onPress={() => setTool('crop')} style={[styles.cropBtn, styles.cropBtnCancel]}>
+              <Text style={styles.cropBtnCancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={applyCrop} disabled={isSaving} style={[styles.cropBtn, styles.cropBtnApply]}>
+              {isSaving ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={styles.cropBtnApplyText}>Apply Crop</Text>}
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -1301,8 +1899,13 @@ const ImageEditor = ({ imageUri, onSave, onClose }: ImageEditorProps) => {
             icon="photo-library"
             label="Gallery"
             active={false}
-            disabled={true}
             onPress={handlePickImage}
+          />
+          <ToolButton
+            icon="crop"
+            label="Crop"
+            active={activeTool === 'crop'}
+            onPress={() => setTool('crop')}
           />
           <ToolButton
             icon="rotate-right"
@@ -1481,9 +2084,11 @@ const styles = StyleSheet.create({
     gap: hp(1),
   },
   headerTitle: {
-    fontSize: size.md,
+    fontSize: 16,
     fontFamily: AppFonts.poppinsSemiBold,
     color: AppColors.black,
+    flex: 1,
+    textAlign: 'center',
   },
   saveBtn: {
     backgroundColor: AppColors.primary,
@@ -1496,11 +2101,11 @@ const styles = StyleSheet.create({
   saveBtnText: {
     color: AppColors.white,
     fontFamily: AppFonts.poppinsSemiBold,
-    fontSize: size.default,
+    fontSize: 14,
   },
   canvasWrapper: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: '#ffffff',
     overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
@@ -1509,7 +2114,7 @@ const styles = StyleSheet.create({
     width: CANVAS_SIZE,
     height: CANVAS_SIZE,
     overflow: 'hidden',
-    backgroundColor: '#000',
+    backgroundColor: '#ffffff',
   },
   canvasImage: {
     width: '100%',
@@ -1560,7 +2165,20 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     borderRadius: 4,
   },
-  // Shape type panel
+  // Shape type panel (scrollable outer/inner)
+  shapePanelOuter: {
+    backgroundColor: AppColors.verylightblue,
+    borderTopWidth: 1,
+    borderTopColor: AppColors.borderColor,
+  },
+  shapePanelInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: hp(1.5),
+    paddingVertical: hp(0.6),
+    gap: hp(0.8),
+  },
+  // Legacy shapePanel (kept for compatibility)
   shapePanel: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1583,7 +2201,7 @@ const styles = StyleSheet.create({
     backgroundColor: AppColors.primary,
   },
   shapePanelLabel: {
-    fontSize: size.xs,
+    fontSize: 11,
     fontFamily: AppFonts.poppinsRegular,
     color: AppColors.black,
   },
@@ -1639,7 +2257,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   sizeValue: {
-    fontSize: size.s,
+    fontSize: 14,
     fontFamily: AppFonts.poppinsMedium,
     color: AppColors.black,
     minWidth: 36,
@@ -1671,7 +2289,7 @@ const styles = StyleSheet.create({
     backgroundColor: AppColors.verylightblue,
   },
   toolLabel: {
-    fontSize: size.xs,
+    fontSize: 11,
     fontFamily: AppFonts.poppinsRegular,
     color: AppColors.black,
   },
@@ -1689,7 +2307,7 @@ const styles = StyleSheet.create({
     gap: hp(1.5),
   },
   modalTitle: {
-    fontSize: size.md,
+    fontSize: 16,
     fontFamily: AppFonts.poppinsSemiBold,
     color: AppColors.black,
     textAlign: 'center',
@@ -1700,7 +2318,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: hp(1.5),
     paddingVertical: hp(1.2),
-    fontSize: size.default,
+    fontSize: 14,
     fontFamily: AppFonts.poppinsRegular,
     color: AppColors.black,
     minHeight: 80,
@@ -1725,7 +2343,7 @@ const styles = StyleSheet.create({
     borderColor: AppColors.primary,
   },
   textStyleLabel: {
-    fontSize: size.md,
+    fontSize: 16,
     fontFamily: AppFonts.poppinsBold,
     color: AppColors.black,
   },
@@ -1754,14 +2372,61 @@ const styles = StyleSheet.create({
   },
   cancelBtnText: {
     fontFamily: AppFonts.poppinsSemiBold,
-    fontSize: size.default,
+    fontSize: 14,
     color: AppColors.black,
   },
   addBtnText: {
     fontFamily: AppFonts.poppinsSemiBold,
-    fontSize: size.default,
+    fontSize: 14,
     color: AppColors.white,
   },
+  // Crop overlay
+  cropDim: {
+    position: 'absolute',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  cropBox: {
+    position: 'absolute',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+  },
+  cropCorner: {
+    position: 'absolute',
+    width: 18,
+    height: 18,
+    borderColor: '#FFFFFF',
+    borderWidth: 3,
+  },
+  cropCornerTL: {top: 0, left: 0, borderRightWidth: 0, borderBottomWidth: 0},
+  cropCornerTR: {top: 0, right: 0, borderLeftWidth: 0, borderBottomWidth: 0},
+  cropCornerBL: {bottom: 0, left: 0, borderRightWidth: 0, borderTopWidth: 0},
+  cropResizeHandle: {
+    position: 'absolute', bottom: -10, right: -10,
+    width: 24, height: 24, borderRadius: 12,
+    backgroundColor: AppColors.primary, borderWidth: 2,
+    borderColor: '#FFFFFF', justifyContent: 'center',
+    alignItems: 'center', zIndex: 10,
+  },
+  cropPanel: {
+    paddingHorizontal: hp(2),
+    paddingVertical: hp(1),
+    backgroundColor: AppColors.verylightblue,
+    borderTopWidth: 1,
+    borderTopColor: AppColors.borderColor,
+    gap: hp(0.8),
+  },
+  cropPanelHint: {
+    fontSize: 11,
+    fontFamily: AppFonts.poppinsRegular,
+    color: AppColors.grey,
+    textAlign: 'center',
+  },
+  cropPanelBtns: {flexDirection: 'row', gap: hp(1)},
+  cropBtn: {flex: 1, paddingVertical: hp(1.2), borderRadius: 10, alignItems: 'center'},
+  cropBtnCancel: {backgroundColor: AppColors.borderColor},
+  cropBtnApply: {backgroundColor: AppColors.primary},
+  cropBtnCancelText: {fontFamily: AppFonts.poppinsSemiBold, fontSize: 14, color: AppColors.black},
+  cropBtnApplyText: {fontFamily: AppFonts.poppinsSemiBold, fontSize: 14, color: '#FFFFFF'},
 });
 
 export default ImageEditor;
