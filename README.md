@@ -2,6 +2,14 @@
 
 A React Native component for creating and editing image templates with drawing, text, shapes, and image overlays.
 
+## Result
+
+<p align="center">
+  <img src="assets/image1.png" width="45%" />
+  &nbsp;&nbsp;
+  <img src="assets/image2.png" width="45%" />
+</p>
+
 ## 📦 **Installation**
 
 ```bash
@@ -215,7 +223,7 @@ MIT License - Free for commercial and personal use.
 
 ---
 
-**Version**: 0.1.1  
+**Version**: 0.1.4
 **Last Updated**: February 2026
 
 This ImageEditor provides a complete solution for image editing needs in React Native applications with professional error handling and extensive customization options.
